@@ -18,6 +18,7 @@ export const Config: Schema<Config> = Schema.object({
   sendINFO: Schema.array(Schema.object({
     weiboUID: Schema.string().description("微博用户UID"),
     forward: Schema.boolean().default(false).description("是否监听转发"),
+    blockwords: Schema.string().description("屏蔽词(多个屏蔽词用分号分隔)"),
     keywords: Schema.string().description("关键词(多个关键词用分号分隔)"),
     groupID: Schema.string().description("需要发送的群组"),
     sendAll: Schema.boolean().default(false).description("@全体成员"),
@@ -66,6 +67,15 @@ const getWeiboAndSendMessageToGroup = async (ctx: Context, params: any) => {
   ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
 }
 
+const getLastPost = (params: any, weiboList: any) => {
+  for (const wb_element of weiboList) {
+    const result = getMessage(params, wb_element)
+    if (!result) { continue }
+    if (result.islast) { return result.post }
+  }
+  return null
+}
+
 const getMessage = (params: any, wbPost: any): { post: string, islast: boolean } | null => {
   if (!wbPost) { return null }
   const { created_at, user } = wbPost
@@ -81,7 +91,6 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
   if ('pic_infos' in wbPost) { weiboType = 2 }
   if ('topic_struct' in wbPost || 'retweeted_status' in wbPost) { weiboType = 1 }
   let message = ''
-  let keywordsList = params.keywords?.split(';') || []
   if (weiboType == 0) {
     const pageInfo = wbPost?.page_info
     if (!pageInfo) { return null }
@@ -107,18 +116,7 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
   }
   const mid = wbPost?.mid || ''
   const url = `\n链接：https://m.weibo.cn/status/${mid}`
-  if (keywordsList.length > 0) {
-    let hasKeywords = false
-    for (const keyword of keywordsList) {
-      if (message.includes(keyword)) {
-        hasKeywords = true
-        break
-      }
-    }
-    if (!hasKeywords) {
-      return null
-    }
-  }
+  if(!checkWords(params, message)) { return null }
   const wbpost = message ? message + url : (screenName + " 发布了微博:\n" + wbPost?.text_raw + url) || ''
   return { post: wbpost, islast: true }
 }
@@ -196,11 +194,32 @@ const parseDateString = (dateString) => {
   return date;
 }
 
-const getLastPost = (params: any, weiboList: any) => {
-  for (const wb_element of weiboList) {
-    const result = getMessage(params, wb_element)
-    if (!result) { continue }
-    if (result.islast) { return result.post }
+const checkWords = (params: any, message: string): boolean => {
+  let keywordsList = params.keywords?.split(';') || []
+  let blockwordsList = params.blockwords?.split(';') || []
+  if (keywordsList.length > 0) {
+    let hasKeywords = false
+    for (const keyword of keywordsList) {
+      if (message.includes(keyword)) {
+        hasKeywords = true
+        break
+      }
+    }
+    if (!hasKeywords) {
+      return false
+    }
   }
-  return null
+  if (blockwordsList.length > 0) {
+    let hasBlockwords = false
+    for (const blockword of blockwordsList) {
+      if (message.includes(blockword)) {
+        hasBlockwords = true
+        break
+      }
+    }
+    if (hasBlockwords) {
+      return false
+    }
+  }
+  return true
 }
