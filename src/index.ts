@@ -1,4 +1,4 @@
-import { Context, Schema } from 'koishi'
+import { Context, h, Schema } from 'koishi'
 import https from 'https'
 
 
@@ -62,7 +62,7 @@ const getWeiboAndSendMessageToGroup = async (ctx: Context, params: any) => {
   if (!result) { return }
   let message = result
   if (params.sendAll) {
-    message = '<at id="all"/> ' + message
+    message = h.at('all') + ' ' + message
   }
   ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
 }
@@ -111,12 +111,12 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
     const picIds = wbPost?.pic_ids || []
     const picInfos = wbPost?.pic_infos || {}
     const firstPicUrl = picInfos?.[picIds[0]]?.large?.url || ''
-    const picture = `<img src="${firstPicUrl}"/>`
+    const picture = h.image(firstPicUrl)
     message += (screenName + " 发布了微博:\n" + text + "\n" + picture) || ''
   }
   const mid = wbPost?.mid || ''
   const url = `\n链接：https://m.weibo.cn/status/${mid}`
-  if(!checkWords(params, message)) { return null }
+  if (!checkWords(params, message)) { return null }
   const wbpost = message ? message + url : (screenName + " 发布了微博:\n" + wbPost?.text_raw + url) || ''
   return { post: wbpost, islast: true }
 }
