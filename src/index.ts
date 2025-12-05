@@ -64,7 +64,8 @@ const getWeiboAndSendMessageToGroup = async (ctx: Context, params: any) => {
   if (params.sendAll) {
     message = h.at('all') + ' ' + message
   }
-  ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
+  // ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
+  console.log(message)
 }
 
 const getLastPost = (params: any, weiboList: any) => {
@@ -116,7 +117,7 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
   }
   const mid = wbPost?.mid || ''
   const url = `\n链接：https://m.weibo.cn/status/${mid}`
-  if (!checkWords(params, message)) { return null }
+  if (!checkWords(params, wbPost?.text_raw)) { return null }
   const wbpost = message ? message + url : (screenName + " 发布了微博:\n" + wbPost?.text_raw + url) || ''
   return { post: wbpost, islast: true }
 }
@@ -195,6 +196,8 @@ const parseDateString = (dateString) => {
 }
 
 const checkWords = (params: any, message: string): boolean => {
+  if(message == null)
+    return false
   let keywordsList = params.keywords?.split(';') || []
   let blockwordsList = params.blockwords?.split(';') || []
   if (keywordsList.length > 0) {
