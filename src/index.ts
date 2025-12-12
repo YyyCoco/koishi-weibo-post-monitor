@@ -15,6 +15,7 @@ export const Config: Schema<Config> = Schema.object({
   account: Schema.string().description("账号(qq号)"),
   plantform: Schema.string().default("onebot").description("账号平台"),
   waitMinutes: Schema.number().default(3).min(1).description("隔多久拉取一次最新微博 (分钟)"),
+  cookie: Schema.string().description("cookie"),
   sendINFO: Schema.array(Schema.object({
     weiboUID: Schema.string().description("微博用户UID"),
     forward: Schema.boolean().default(false).description("是否监听转发"),
@@ -64,7 +65,7 @@ const getWeiboAndSendMessageToGroup = async (ctx: Context, params: any) => {
   if (params.sendAll) {
     message = h.at('all') + ' ' + message
   }
-  // ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
+  ctx.bots[`${params.plantform}:${params.account}`].sendMessage(params.groupID, message)
   console.log(message)
 }
 
@@ -123,19 +124,18 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
 }
 
 const getWeibo = async (config: any, callback?: any): Promise<any> => {
-  const { weiboUID } = config
+  const { weiboUID, cookie } = config
   if (!weiboUID) { return }
   const headers = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
     "cache-control": "no-cache",
-    "cookie": "XSRF-TOKEN=mgVY3WMp8U-T6Wbu24ifdazm; SUBP=0033WrSXqPxfM72-Ws9jqgMF55529P9D9WhizH8r9Hyn870HzJo4TQoB; SUB=_2AkMSf_1df8NxqwJRmfATxWrlaIV_ywjEieKkIwyGJRMxHRl-yj8XqksbtRB6Of_Tsj1wFglssEkNvyqikP19B0UlIrd8; WBPSESS=NcA3pTjBP9SOtpsXaAXWlx_1aL3IfVadLkk5h-hKiZrhJi_NyNc2r5RbB0ZE0gYuG6ZSJmF8k26JJ46ltyme0fAcMSF9VPonnDU1TPvBjVADJPPa99vi0TVPQDCUKIMU",
-    "referer": "https://passport.weibo.com/",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
-    "x-xsrf-token": "mgVY3WMp8U-T6Wbu24ifdazm"
+    "cookie": cookie,
+    "referer": "https://www.weibo.com/u/7730797357",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
   }
   const options = {
-    hostname: "weibo.com",
+    hostname: "www.weibo.com",
     path: "/ajax/statuses/mymblog?uid=" + weiboUID,
     method: "GET",
     headers: headers
@@ -196,7 +196,7 @@ const parseDateString = (dateString) => {
 }
 
 const checkWords = (params: any, message: string): boolean => {
-  if(message == null)
+  if (message == null)
     return false
   let keywordsList = params.keywords?.split(';') || []
   let blockwordsList = params.blockwords?.split(';') || []
