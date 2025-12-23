@@ -1,21 +1,52 @@
 import { Context, h, Schema } from 'koishi'
 import https from 'https'
+import axios from 'axios'
 
 
 export const name = 'weibo-post-monitor'
+
+var auto_cookie = null
+var now_user_agent = null
+const user_agent_list = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.90 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.105 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.71 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.187 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.7267.799 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.4907.884 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.6562.41 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2276.302 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.5174.848 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.4662.897 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.8759.750 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.9383.882 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.7253.966 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.3909.697 Safari/537.36 Edge/13.10586",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.85 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.130 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.199 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 11.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.139 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.118 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5938.149 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.140 Safari/537.36"
+]
 
 export interface Config {
   account: string,
   plantform: string,
   waitMinutes: number,
   sendINFO: any,
+  is_using_cookie: boolean,
+  manual_cookie: string,
 }
 
 export const Config: Schema<Config> = Schema.object({
   account: Schema.string().description("账号(qq号)"),
   plantform: Schema.string().default("onebot").description("账号平台"),
   waitMinutes: Schema.number().default(3).min(1).description("隔多久拉取一次最新微博 (分钟)"),
-  cookie: Schema.string().description("cookie"),
+  is_using_cookie: Schema.boolean().default(false).description("是否启用输入cookie"),
+  manual_cookie: Schema.string().default("").description("输入cookie"),
   sendINFO: Schema.array(Schema.object({
     weiboUID: Schema.string().description("微博用户UID"),
     forward: Schema.boolean().default(false).description("是否监听转发"),
@@ -45,7 +76,12 @@ export function apply(ctx: Context, config: Config) {
     account: config.account,
     plantform: config.plantform,
     waitMinutes: config.waitMinutes,
+    is_using_cookie: config.is_using_cookie,
   }
+
+  auto_cookie = config.manual_cookie
+  now_user_agent = user_agent_list[0]
+
   ctx.setInterval(async () => {
     for (const singleConfig of config.sendINFO) {
       const params = { ...commonConfig, ...singleConfig }
@@ -123,16 +159,26 @@ const getMessage = (params: any, wbPost: any): { post: string, islast: boolean }
   return { post: wbpost, islast: true }
 }
 
-const getWeibo = async (config: any, callback?: any): Promise<any> => {
-  const { weiboUID, cookie } = config
+const getWeibo = async (config: any, callback?: any, retry: boolean = false): Promise<any> => {
+  const { weiboUID, is_using_cookie } = config
   if (!weiboUID) { return }
+
+  if (!is_using_cookie && !auto_cookie) {
+    now_user_agent = user_agent_list[Math.floor(Math.random() * user_agent_list.length)]
+    auto_cookie = await getCookie()
+  }
+
+  if (!auto_cookie) {
+    throw new Error("Cookie config is null, please check the config");
+  }
+
   const headers = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
     "cache-control": "no-cache",
-    "cookie": cookie,
-    "referer": "https://www.weibo.com/u/7730797357",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
+    "cookie": auto_cookie,
+    "referer": "https://www.weibo.com/u/" + weiboUID,
+    "user-agent": now_user_agent
   }
   const options = {
     hostname: "www.weibo.com",
@@ -146,13 +192,26 @@ const getWeibo = async (config: any, callback?: any): Promise<any> => {
       res.on('data', (chunk) => {
         body += chunk
       })
-      res.on('end', () => {
+      res.on('end', async () => {
         try {
           const returnData = JSON.parse(body);
           callback?.(returnData)
           resolve(returnData)
         } catch (error) {
-          reject({ error, body })
+          // 解析失败时，如果还没有重试过且不是使用手动cookie，则更新cookie后重试一次
+          if (!retry && !is_using_cookie) {
+            try {
+              now_user_agent = user_agent_list[Math.floor(Math.random() * user_agent_list.length)]
+              auto_cookie = await getCookie()
+              // 重新请求一次
+              const retryResult = await getWeibo(config, callback, true)
+              resolve(retryResult)
+            } catch (retryError) {
+              reject({ error, body, retryError })
+            }
+          } else {
+            reject({ error, body })
+          }
         }
       })
       res.on('error', (error) => {
@@ -225,4 +284,60 @@ const checkWords = (params: any, message: string): boolean => {
     }
   }
   return true
+}
+
+const mergeCookies = (cookies: string[]): string => {
+  return cookies.map(c => c.split(';')[0]).join('; ')
+}
+
+const getCookie = async (): Promise<string> => {
+  const commonHeaders = {
+    'user-agent': now_user_agent,
+    'accept': '*/*',
+    'origin': 'https://passport.weibo.com',
+    'referer': 'https://passport.weibo.com/visitor/visitor'
+  }
+
+  let allCookies: string[] = []
+
+  const step1Response = await axios.post('https://passport.weibo.com/visitor/genvisitor2', 'cb=visitor_gray_callback&ver=20250916&request_id=fb15e537349aef3542ed130a47d48eb8&tid=&from=weibo&webdriver=false&rid=01by624JxwbmsPak-53wiC9LGhR6I&return_url=https://weibo.com/', {
+    headers: {
+      ...commonHeaders,
+      'content-type': 'application/x-www-form-urlencoded'
+    },
+    responseType: 'text'
+  })
+
+  const step1SetCookies = step1Response.headers['set-cookie'] || []
+  allCookies.push(...step1SetCookies)
+
+  const step1Body = step1Response.data
+  let visitorId: string = ''
+  try {
+    const jsonMatch = step1Body.match(/visitor_gray_callback\s*\(\s*({[\s\S]*})\s*\)/)
+    if (!jsonMatch || !jsonMatch[1]) {
+      throw new Error('无法从响应中提取 JSON 对象')
+    }
+
+    const step1Data = JSON.parse(jsonMatch[1])
+    visitorId = step1Data?.data?.tid || ''
+    if (!visitorId) {
+      throw new Error('未获取到 visitor id，响应数据: ' + JSON.stringify(step1Data))
+    }
+  } catch (error) {
+    throw new Error('解析 genvisitor2 响应失败: ' + error.message + ', 响应体: ' + step1Body)
+  }
+
+  const step2Response = await axios.get(`https://passport.weibo.com/visitor/visitor?a=incarnate&t=${encodeURIComponent(visitorId)}`, {
+    headers: {
+      ...commonHeaders,
+      'cookie': mergeCookies(allCookies)
+    },
+    responseType: 'text'
+  })
+
+  const step2SetCookies = step2Response.headers['set-cookie'] || []
+  allCookies.push(...step2SetCookies)
+
+  return mergeCookies(allCookies)
 }
