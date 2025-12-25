@@ -39,7 +39,6 @@ async function getMessage(params: any, wbPost: any): Promise<{ post: string; isl
   }
   const screenName = user?.screen_name || ''
   let weiboType = -1
-  logger.info("wbPost = " + JSON.stringify(wbPost))
   //获取微博类型0-视频，2-图文,1-转发微博
   if (wbPost?.page_info) {
     weiboType = 0
@@ -90,7 +89,7 @@ async function getMessage(params: any, wbPost: any): Promise<{ post: string; isl
   if (!checkWords(params, message_text)) { return null }
 
   let message = tempMessage.replace('{temp_text}', message_text)
-  const wbpost = message ? message + urlMessage : (screenName + " 发布了微博:\n" + wbPost?.text_raw + urlMessage) || ''
+  const wbpost = message ? message + urlMessage : (screenName + " 发布了微博:\n" + (message_text ? message_text : wbPost?.text_raw) + urlMessage) || ''
   return { post: wbpost, islast: true }
 }
 
@@ -132,7 +131,7 @@ async function getDetailMessage(wb_url: any): Promise<string | null> {
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-origin",
-      "user-agent": now_user_agent ,
+      "user-agent": now_user_agent,
       "x-requested-with": "XMLHttpRequest",
       "cookie": auto_cookie,
     }
@@ -150,16 +149,22 @@ async function getDetailMessage(wb_url: any): Promise<string | null> {
 
     const responseData = response.data
 
+    // logger.info("responseData = " + JSON.stringify(responseData))
+
     // 检查响应格式
     if (!responseData || responseData.ok !== 1 || !responseData.data) {
+      logger.error('获取微博response返回报错: ' + JSON.stringify(responseData))
       return null
     }
 
     const longTextContent = responseData.data.longTextContent
 
     if (!longTextContent) {
+      logger.error("获取微博返回的longTextContent为空")
       return null
     }
+
+    // logger.info("longTextContent = " + JSON.stringify(longTextContent))
 
     // 将 HTML 转换为文本，保留格式
     const plainText = stripHtmlTags(longTextContent)
