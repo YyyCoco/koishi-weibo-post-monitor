@@ -18,7 +18,9 @@ export function apply(ctx: Context, config: ConfigType) {
     is_using_cookie: config.is_using_cookie,
   }
 
-  setCookie(config.manual_cookie)
+  if(config.is_using_cookie){
+    setCookie(config.manual_cookie)
+  }
   setUserAgent(USER_AGENT_LIST[0])
 
   ctx.setInterval(async () => {
